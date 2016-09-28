@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sideshow/apns2/token"
 	"golang.org/x/net/http2"
 )
 
@@ -37,9 +38,10 @@ var (
 
 // Client represents a connection with the APNs
 type Client struct {
-	HTTPClient  *http.Client
-	Certificate tls.Certificate
 	Host        string
+	Certificate tls.Certificate
+	Token       *token.Token
+	HTTPClient  *http.Client
 }
 
 // NewClient returns a new Client with an underlying http.Client configured with
@@ -76,6 +78,30 @@ func NewClient(certificate tls.Certificate) *Client {
 	}
 }
 
+// NewTokenClient returns a new Client with an underlying http.Client configured
+// with the correct APNs HTTP/2 transport settings. It does not connect to the APNs
+// until the first Notification is sent via the Push method.
+//
+// As per the Apple APNs Provider API, you should keep a handle on this client
+// so that you can keep your connections with APNs open across multiple
+// notifications; don’t repeatedly open and close connections. APNs treats rapid
+// connection and disconnection as a denial-of-service attack.
+func NewTokenClient(token *token.Token) *Client {
+	transport := &http2.Transport{
+		DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+			return tls.DialWithDialer(&net.Dialer{Timeout: TLSDialTimeout}, network, addr, cfg)
+		},
+	}
+	return &Client{
+		Token: token,
+		HTTPClient: &http.Client{
+			Transport: transport,
+			Timeout:   HTTPClientTimeout,
+		},
+		Host: DefaultHost,
+	}
+}
+
 // Development sets the Client to use the APNs development push endpoint.
 func (c *Client) Development() *Client {
 	c.Host = HostDevelopment
@@ -95,13 +121,17 @@ func (c *Client) Production() *Client {
 // gateway, or an error if something goes wrong.
 func (c *Client) Push(n *Notification) (*Response, error) {
 	payload, err := json.Marshal(n)
-
 	if err != nil {
 		return nil, err
 	}
 
 	url := fmt.Sprintf("%v/3/device/%v", c.Host, n.DeviceToken)
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+
+	if c.Token != nil {
+		c.setTokenHeader(req)
+	}
+
 	setHeaders(req, n)
 	httpRes, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -118,6 +148,11 @@ func (c *Client) Push(n *Notification) (*Response, error) {
 		return &Response{}, err
 	}
 	return response, nil
+}
+
+func (c *Client) setTokenHeader(r *http.Request) {
+	c.Token.GenerateIfExpired()
+	r.Header.Set("authorization", fmt.Sprintf("bearer %v", c.Token.Bearer))
 }
 
 func setHeaders(r *http.Request, n *Notification) {

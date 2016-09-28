@@ -96,6 +96,7 @@ func (c *Response) Sent() bool {
 	return c.StatusCode == StatusSent
 }
 
+// Time represents a device uninstall time
 type Time struct {
 	time.Time
 }

@@ -1,5 +1,7 @@
 # APNS/2
 
+NOTE: This is an experimental branch for the purpose of testing the new token based authentication
+
 APNS/2 is a go package designed for simple, flexible and fast Apple Push Notifications on iOS, OSX and Safari using the new HTTP/2 Push provider API.
 
 [![Build Status](https://travis-ci.org/sideshow/apns2.svg?branch=master)](https://travis-ci.org/sideshow/apns2)  [![Coverage Status](https://coveralls.io/repos/sideshow/apns2/badge.svg?branch=master&service=github)](https://coveralls.io/github/sideshow/apns2?branch=master)  [![GoDoc](https://godoc.org/github.com/sideshow/apns2?status.svg)](https://godoc.org/github.com/sideshow/apns2)
@@ -7,6 +9,7 @@ APNS/2 is a go package designed for simple, flexible and fast Apple Push Notific
 ## Features
 
 - Uses new Apple APNs HTTP/2 connection
+- Supports new Apple Token Based Authentication (JWT)
 - Works with older versions of go (1.5.x) not just 1.6
 - Supports new iOS 10 features such as Collapse IDs, Subtitles and Mutable Notifications
 - Supports persistent connections to APNs
