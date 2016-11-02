@@ -22,17 +22,19 @@ const (
 
 // Possible errors when parsing a .p8 file.
 var (
-	ErrAuthKeyWrongType = errors.New("token: AuthKey must be of type ecdsa.PrivateKey")
+	ErrAuthKeyNotPem   = errors.New("token: AuthKey must be a valid .p8 PEM file")
+	ErrAuthKeyNotECDSA = errors.New("token: AuthKey must be of type ecdsa.PrivateKey")
+	ErrAuthKeyNil      = errors.New("token: AuthKey was nil")
 )
 
 // Token represents an Apple Provider Authentication Token (JSON Web Token).
 type Token struct {
+	sync.Mutex
 	AuthKey  *ecdsa.PrivateKey
 	KeyID    string
 	TeamID   string
 	IssuedAt int64
 	Bearer   string
-	m        sync.Mutex
 }
 
 // AuthKeyFromFile loads a .p8 certificate from a local file and returns a
@@ -49,6 +51,9 @@ func AuthKeyFromFile(filename string) (*ecdsa.PrivateKey, error) {
 // returns an *ecdsa.PrivateKey.
 func AuthKeyFromBytes(bytes []byte) (*ecdsa.PrivateKey, error) {
 	block, _ := pem.Decode(bytes)
+	if block == nil {
+		return nil, ErrAuthKeyNotPem
+	}
 	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
 		return nil, err
@@ -57,15 +62,15 @@ func AuthKeyFromBytes(bytes []byte) (*ecdsa.PrivateKey, error) {
 	case *ecdsa.PrivateKey:
 		return pk, nil
 	default:
-		return nil, ErrAuthKeyWrongType
+		return nil, ErrAuthKeyNotECDSA
 	}
 }
 
 // GenerateIfExpired checks to see if the token is about to expire and
 // generates a new token.
 func (t *Token) GenerateIfExpired() {
-	t.m.Lock()
-	defer t.m.Unlock()
+	t.Lock()
+	defer t.Unlock()
 	if t.Expired() {
 		t.Generate()
 	}
@@ -78,6 +83,9 @@ func (t *Token) Expired() bool {
 
 // Generate creates a new token.
 func (t *Token) Generate() (bool, error) {
+	if t.AuthKey == nil {
+		return false, ErrAuthKeyNil
+	}
 	issuedAt := time.Now().Unix()
 	jwtToken := &jwt.Token{
 		Header: map[string]interface{}{
